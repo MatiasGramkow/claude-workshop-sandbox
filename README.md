@@ -1,6 +1,10 @@
 # Claude workshop sandbox
 
-A tiny Astro site to practise **goals, loops and reviews** with Claude Code in VS Code.
+**Costume Lab** - a Halloween costume builder in Astro, made to practise **goals, loops and
+reviews** with Claude Code in VS Code. Pick a hat, a face, an outfit, something for your back,
+a prop and a sidekick, and the mannequin dresses up. Every piece is one Markdown file with an
+SVG drawing, and every one arrives as a pull request.
+
 Every pull request with a green build is merged into `master` automatically and the site
 redeploys to **https://matiasgramkow.github.io/claude-workshop-sandbox/** within a minute
 or two.
@@ -26,13 +30,17 @@ You need Node 22.12 or newer (`node -v`) and git.
 
 ## Exercise 1 — your first PR (warm-up)
 
-Add yourself to the wall: copy `src/content/attendees/matias.md` to
-`src/content/attendees/<your-first-name>.md` and fill in the four fields. One file per
-person means nobody gets a merge conflict.
+Add a costume piece: one new file in `src/content/pieces/<piece-name>.md`. Copy an existing
+piece from the same slot (`head`, `face`, `body`, `back`, `prop` or `sidekick`) to see where
+things sit, set `author` to your name, and write a one-line "how to make it" tip as the body.
+One file per piece means nobody gets a merge conflict.
 
-Try it as a prompt instead of by hand:
+Let Claude draw it - that is the point:
 
-> Add me to the workshop wall. Name: …, team: …, emoji: …, goal: …
+> Add a zombie hand as a new prop to the Costume Lab. Look at the other props for the
+> coordinate system, make it read clearly at thumbnail size, author: <your name>.
+
+Then run `npm run dev`, click your piece on, and check it lines up with the mannequin.
 
 ## Exercise 2 — goals
 
@@ -40,8 +48,9 @@ Try it as a prompt instead of by hand:
 it from finishing early. Write the condition so it can be *checked*, not just felt:
 
 ```text
-/goal The wall has a team filter: buttons above the grid, one per team, clicking one shows
-only that team's cards, "All" resets it. npm run check and npm run build both pass.
+/goal The Costume Lab has a "Copy link" button next to "Surprise me" that copies the current
+outfit's URL and shows "Copied!" for two seconds. It still works without JavaScript (button
+hidden). npm run check and npm run build both pass.
 ```
 
 Things to notice: how Claude verifies the condition, what happens when the condition is
@@ -76,11 +85,12 @@ Then swap: review a neighbour's open PR with `/code-review <PR url>` and leave a
 
 Pick one, set a `/goal`, and let a loop babysit the PR:
 
-- a team filter or a search box on the wall
-- dark mode that follows the OS setting
-- a `/stats` page: cards per team, most-used emoji
-- a "random attendee" button
-- a 404 page
+- a "Download PNG" button for your finished costume
+- ready-made looks ("Classic witch", "Spooky duo") as their own content collection
+- a filter that shows only pieces from one costume (Vampire, Ghost …)
+- a `/gallery` page that shows every piece big, grouped by author
+- a little animation: the sidekick bobs, the pumpkin glows
+- a 404 page that is a ghost
 
 ## How the automation works
 

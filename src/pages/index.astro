@@ -1,62 +1,520 @@
 ---
 import { getCollection, render } from 'astro:content';
 import Base from '../layouts/Base.astro';
-import AttendeeCard from '../components/AttendeeCard.astro';
+import Mannequin from '../components/Mannequin.astro';
+import { LAYER_ORDER, SLOTS } from '../lib/slots';
 
-const attendees = (await getCollection('attendees')).sort((a, b) =>
-  a.data.name.localeCompare(b.data.name, 'da'),
-);
+const pieces = (await getCollection('pieces')).sort((a, b) => a.data.name.localeCompare(b.data.name, 'en'));
+const bySlot = (slot: string) => pieces.filter((piece) => piece.data.slot === slot);
 
-const cards = await Promise.all(
-  attendees.map(async (attendee) => ({ attendee, Content: (await render(attendee)).Content })),
-);
+const tips = await Promise.all(pieces.map(async (piece) => ({ piece, Tip: (await render(piece)).Content })));
+
+const combinations = SLOTS.reduce((total, slot) => total * (bySlot(slot.id).length + 1), 1) - 1;
+const authors = [...new Set(pieces.map((piece) => piece.data.author))].sort();
+
+// Showing the chosen pieces is pure CSS (:has + :checked), so the builder works without JavaScript.
+const showRules = pieces
+  .map(
+    ({ id }) =>
+      `.builder:has(#pick-${id}:checked) :is([data-piece="${id}"], [data-tip="${id}"]) { display: revert; }`,
+  )
+  .join('\n');
 ---
 
-<Base title="Claude workshop wall">
-  <header>
-    <p class="eyebrow">Claude Code workshop</p>
-    <h1>Workshop wall</h1>
+<Base title="Costume Lab" description="Mix and match a Halloween costume. Every piece came in as a pull request.">
+  <style is:inline set:html={showRules}></style>
+
+  <header class="hero">
+    <p class="eyebrow">Claude Code workshop · Halloween edition</p>
+    <h1>Costume Lab</h1>
     <p class="lede">
-      {attendees.length}
-      {attendees.length === 1 ? 'person has' : 'people have'} shipped a pull request today. Add
-      yourself: see the README.
+      Click a piece in each row to dress the mannequin. {pieces.length} pieces,
+      <strong>{combinations.toLocaleString('en')}</strong> possible costumes - and every piece arrived as a pull
+      request.
     </p>
   </header>
 
-  <section class="grid">
-    {
-      cards.map(({ attendee, Content }) => (
-        <AttendeeCard {...attendee.data}>
-          <Content />
-        </AttendeeCard>
-      ))
-    }
-  </section>
+  <form class="builder" id="builder">
+    <section class="stage-col" aria-label="Your costume">
+      <div class="stage-head">
+        <div class="stage">
+          <svg viewBox="0 0 240 360" role="img" aria-labelledby="outfit-title">
+            <ellipse cx="120" cy="346" rx="78" ry="9" fill="black" opacity="0.45"></ellipse>
+            {
+              LAYER_ORDER.map((layer) =>
+                layer === 'base' ? (
+                  <Mannequin />
+                ) : (
+                  bySlot(layer).map((piece) => <g class="layer" data-piece={piece.id} set:html={piece.data.svg} />)
+                ),
+              )
+            }
+          </svg>
+        </div>
+        <p class="outfit-title" id="outfit-title" aria-live="polite">Pick a piece to start your costume</p>
+        <div class="actions">
+          <button type="button" class="btn primary" id="surprise">Surprise me</button>
+          <button type="reset" class="btn">Start over</button>
+        </div>
+      </div>
+
+      <div class="howto">
+        <h2>How to make it</h2>
+        <ul>
+          {
+            tips.map(({ piece, Tip }) => (
+              <li class="tip" data-tip={piece.id}>
+                <strong>{piece.data.name}</strong>
+                <Tip />
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+
+    <section class="picker" aria-label="Costume pieces">
+      {
+        SLOTS.map((slot) => (
+          <fieldset class="slot">
+            <legend>
+              <span class="slot-name">{slot.label}</span>
+              <span class="slot-hint">{slot.hint}</span>
+            </legend>
+            <div class="cards">
+              <input class="pick" type="radio" name={slot.id} id={`pick-none-${slot.id}`} value="none" checked />
+              <label for={`pick-none-${slot.id}`} class="card none">
+                <svg viewBox={slot.thumb} aria-hidden="true">
+                  <Mannequin faint />
+                </svg>
+                <span class="card-name">None</span>
+              </label>
+              {bySlot(slot.id).map((piece) => (
+                <>
+                  <input
+                    class="pick"
+                    type="radio"
+                    name={slot.id}
+                    id={`pick-${piece.id}`}
+                    value={piece.id}
+                    data-costume={piece.data.costume}
+                  />
+                  <label for={`pick-${piece.id}`} class="card">
+                    <svg viewBox={slot.thumb} aria-hidden="true">
+                      {slot.id === 'back' && <g set:html={piece.data.svg} />}
+                      <Mannequin faint />
+                      {slot.id !== 'back' && <g set:html={piece.data.svg} />}
+                    </svg>
+                    <span class="card-name">{piece.data.name}</span>
+                    <span class="card-costume">{piece.data.costume}</span>
+                  </label>
+                </>
+              ))}
+            </div>
+          </fieldset>
+        ))
+      }
+    </section>
+  </form>
+
+  <footer class="credits">
+    <p>Pieces by {authors.join(', ')}.</p>
+    <p>
+      Add your own piece: one Markdown file with an SVG in <code>src/content/pieces/</code> -
+      <a href="https://github.com/MatiasGramkow/claude-workshop-sandbox">see the README</a>.
+    </p>
+  </footer>
 </Base>
 
+<script>
+  const form = document.querySelector<HTMLFormElement>('#builder')!;
+  const title = document.querySelector<HTMLElement>('#outfit-title')!;
+  const picks = () => [...form.querySelectorAll<HTMLInputElement>('input.pick')];
+  const slotNames = [...new Set(picks().map((input) => input.name))];
+  const OPTIONAL = new Set(['back', 'prop', 'sidekick']);
+
+  function describe(costumes: string[]) {
+    if (costumes.length === 0) return 'Pick a piece to start your costume';
+    if (costumes.length === 1) return `You are: ${costumes[0]}`;
+    return `You are: ${costumes.slice(0, -1).join(', ')} & ${costumes.at(-1)} mash-up`;
+  }
+
+  function update() {
+    const chosen = picks().filter((input) => input.checked && input.value !== 'none');
+    title.textContent = describe([...new Set(chosen.map((input) => input.dataset.costume!))]);
+    const hash = new URLSearchParams(chosen.map((input) => [input.name, input.value])).toString();
+    history.replaceState(null, '', hash ? `#${hash}` : location.pathname);
+  }
+
+  function choose(slot: string, value: string) {
+    const input = picks().find((candidate) => candidate.name === slot && candidate.value === value);
+    if (input) input.checked = true;
+  }
+
+  document.querySelector('#surprise')!.addEventListener('click', () => {
+    for (const slot of slotNames) {
+      const options = picks().filter((input) => input.name === slot && input.value !== 'none');
+      const skip = OPTIONAL.has(slot) && Math.random() < 0.3;
+      choose(slot, skip ? 'none' : options[Math.floor(Math.random() * options.length)].value);
+    }
+    update();
+  });
+
+  form.addEventListener('change', update);
+  form.addEventListener('reset', () => setTimeout(update));
+
+  // Restore a shared outfit from the link, e.g. #head=witch-hat&body=ghost-sheet
+  function restore() {
+    form.reset();
+    for (const [slot, value] of new URLSearchParams(location.hash.slice(1))) choose(slot, value);
+    update();
+  }
+
+  window.addEventListener('hashchange', restore);
+  restore();
+</script>
+
 <style>
+  .hero,
+  .builder,
+  .credits {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+
+  .hero {
+    padding-top: 40px;
+    padding-bottom: 24px;
+  }
+
   .eyebrow {
     margin: 0;
-    color: var(--accent);
+    color: var(--accent-2);
     font-weight: 600;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
   }
 
   h1 {
     margin: 4px 0 8px;
-    font-size: 2.5rem;
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: clamp(3rem, 9vw, 5.5rem);
+    line-height: 1;
+    color: var(--accent);
+    text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 45%, transparent);
+    letter-spacing: 0.02em;
   }
 
   .lede {
-    margin: 0 0 32px;
+    margin: 0;
+    max-width: 640px;
+    color: var(--muted);
+    font-size: 1.0625rem;
+  }
+
+  .lede strong {
+    color: var(--glow);
+  }
+
+  .builder {
+    display: grid;
+    grid-template-columns: minmax(280px, 400px) 1fr;
+    gap: 32px;
+    align-items: start;
+  }
+
+  .stage-col {
+    position: sticky;
+    top: 16px;
+  }
+
+  .stage {
+    aspect-ratio: 2 / 3;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background:
+      radial-gradient(
+        circle at 80% 14%,
+        var(--moon) 0 6%,
+        color-mix(in srgb, var(--glow) 25%, transparent) 7%,
+        transparent 18%
+      ),
+      radial-gradient(circle at 18% 22%, var(--text) 0 0.4%, transparent 0.6%),
+      radial-gradient(circle at 36% 9%, var(--text) 0 0.3%, transparent 0.5%),
+      radial-gradient(circle at 60% 30%, var(--text) 0 0.3%, transparent 0.5%),
+      linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 70%, var(--sky-bottom) 100%);
+    padding: 16px;
+    box-shadow: 0 20px 60px color-mix(in srgb, black 50%, transparent);
+  }
+
+  .stage svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .layer {
+    display: none;
+  }
+
+  .outfit-title {
+    margin: 16px 0 12px;
+    font-family: var(--display);
+    font-size: 1.75rem;
+    line-height: 1.15;
+    color: var(--glow);
+    min-height: 2.3em;
+  }
+
+  .actions {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn {
+    font: inherit;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  .btn.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+
+  .btn:hover {
+    filter: brightness(1.12);
+  }
+
+  .btn:focus-visible {
+    outline: 3px solid var(--glow);
+    outline-offset: 2px;
+  }
+
+  .howto {
+    display: none;
+    margin-top: 24px;
+    padding: 16px 20px;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .builder:has(.pick:not([value='none']):checked) .howto {
+    display: block;
+  }
+
+  .howto h2 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    color: var(--accent);
+  }
+
+  .howto ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tip {
+    display: none;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+    font-size: 0.9375rem;
+  }
+
+  .tip :global(p) {
+    margin: 2px 0 0;
     color: var(--muted);
   }
 
-  .grid {
+  .slot {
+    margin: 0 0 28px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  legend {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding: 0;
+  }
+
+  .slot-name {
+    font-family: var(--display);
+    font-size: 1.75rem;
+    color: var(--text);
+    letter-spacing: 0.03em;
+  }
+
+  .slot-hint {
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .cards {
+    position: relative;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    gap: 12px;
+  }
+
+  .pick {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    pointer-events: none;
+  }
+
+  .card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 8px 12px;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    cursor: pointer;
+    text-align: center;
+    transition:
+      transform 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .card svg {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 10px;
+    background: var(--surface-2);
+  }
+
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent-2);
+  }
+
+  .pick:checked + .card {
+    border-color: var(--accent);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent),
+      0 8px 24px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+
+  .pick:focus-visible + .card {
+    outline: 3px solid var(--glow);
+    outline-offset: 2px;
+  }
+
+  .card-name {
+    margin-top: 6px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    line-height: 1.2;
+  }
+
+  .card-costume {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .none .card-name {
+    color: var(--muted);
+  }
+
+  .credits {
+    padding-top: 24px;
+    padding-bottom: 48px;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .credits p {
+    margin: 4px 0;
+  }
+
+  @media (max-width: 760px) {
+    .builder {
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    /* The costume becomes a bar pinned to the top, so it stays in view while you scroll
+       through the pieces; the tips move below the pieces. */
+    .stage-col {
+      display: contents;
+    }
+
+    .stage-head {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 112px 1fr;
+      grid-template-rows: 1fr auto;
+      column-gap: 16px;
+      align-items: center;
+      margin: 0 -16px;
+      padding: 8px 16px;
+      background: color-mix(in srgb, var(--bg) 94%, transparent);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stage {
+      grid-row: span 2;
+      padding: 4px;
+      border-radius: 12px;
+    }
+
+    .outfit-title {
+      margin: 0;
+      min-height: 0;
+      font-size: 1.25rem;
+      align-self: end;
+    }
+
+    .actions {
+      align-self: start;
+      margin-top: 8px;
+      gap: 8px;
+    }
+
+    .btn {
+      padding: 8px 14px;
+      font-size: 0.875rem;
+    }
+
+    .picker {
+      order: 1;
+    }
+
+    .howto {
+      order: 2;
+      margin-top: 0;
+    }
+
+    .cards {
+      grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card {
+      transition: none;
+    }
   }
 </style>
