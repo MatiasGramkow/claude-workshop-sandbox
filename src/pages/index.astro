@@ -54,6 +54,7 @@ const showRules = pieces
         <p class="outfit-title" id="outfit-title" aria-live="polite">Pick a piece to start your costume</p>
         <div class="actions">
           <button type="button" class="btn primary" id="surprise">Surprise me</button>
+          <button type="button" class="btn" id="copy-link" hidden>Copy link</button>
           <button type="reset" class="btn">Start over</button>
         </div>
       </div>
@@ -158,6 +159,18 @@ const showRules = pieces
       choose(slot, skip ? 'none' : options[Math.floor(Math.random() * options.length)].value);
     }
     update();
+  });
+
+  // The outfit already lives in the URL hash, so the link is just the current address.
+  // Hidden in the markup, so it only appears when this script runs.
+  const copyLink = document.querySelector<HTMLButtonElement>('#copy-link')!;
+  let copiedTimer: number | undefined;
+  copyLink.hidden = false;
+  copyLink.addEventListener('click', () => {
+    navigator.clipboard?.writeText(location.href).catch(() => {});
+    copyLink.textContent = 'Copied!';
+    clearTimeout(copiedTimer);
+    copiedTimer = window.setTimeout(() => (copyLink.textContent = 'Copy link'), 2000);
   });
 
   form.addEventListener('change', update);
