@@ -176,6 +176,40 @@ const showRules = pieces
   form.addEventListener('change', update);
   form.addEventListener('reset', () => setTimeout(update));
 
+  // Start over plays hard to get once there is a costume to lose (mouse only, so touch and
+  // keyboard can still reset); with nothing picked, it knocks the whole page over instead.
+  const startOver = form.querySelector<HTMLButtonElement>('button[type="reset"]')!;
+  const hasOutfit = () => picks().some((input) => input.checked && input.value !== 'none');
+  let offset = { x: 0, y: 0 };
+
+  function dodge(x: number, y: number) {
+    offset = { x, y };
+    startOver.style.translate = x || y ? `${x}px ${y}px` : '';
+  }
+
+  startOver.addEventListener('pointerenter', (event) => {
+    if (event.pointerType !== 'mouse' || !hasOutfit()) return;
+    const box = startOver.getBoundingClientRect();
+    const homeLeft = box.left - offset.x;
+    const homeTop = box.top - offset.y;
+    const jump = () => (Math.random() < 0.5 ? -1 : 1) * (60 + Math.random() * 100);
+    const clamp = (value: number, home: number, size: number, max: number) =>
+      Math.min(Math.max(value, 8 - home), max - size - 8 - home);
+    dodge(
+      clamp(offset.x + jump(), homeLeft, box.width, innerWidth),
+      clamp(offset.y + jump(), homeTop, box.height, innerHeight),
+    );
+  });
+
+  startOver.addEventListener('click', () => {
+    if (hasOutfit() || document.body.classList.contains('toppled')) return;
+    document.body.classList.add('toppled');
+    setTimeout(() => document.body.classList.remove('toppled'), 3000);
+  });
+
+  form.addEventListener('change', () => hasOutfit() || dodge(0, 0));
+  form.addEventListener('reset', () => dodge(0, 0));
+
   // Restore a shared outfit from the link, e.g. #head=witch-hat&body=ghost-sheet
   function restore() {
     form.reset();
@@ -306,6 +340,39 @@ const showRules = pieces
 
   .btn:hover {
     filter: brightness(1.12);
+  }
+
+  .btn[type='reset'] {
+    transition: translate 0.18s ease-out;
+  }
+
+  /* Start over with nothing picked: everything tips over sideways, falls, then climbs back. */
+  :global(body.toppled) {
+    overflow: hidden;
+  }
+
+  :global(.toppled) :is(.hero, .stage-head, .howto, .slot, .credits) {
+    animation: topple 3s ease-in-out both;
+    transform-origin: bottom right;
+  }
+
+  :global(.toppled) :is(.stage-head, .slot:nth-child(even)) {
+    --tilt: -80deg;
+    transform-origin: bottom left;
+  }
+
+  :global(.toppled) .slot:nth-child(3n) {
+    animation-delay: 0.1s;
+  }
+
+  @keyframes topple {
+    30% {
+      transform: rotate(var(--tilt, 80deg));
+    }
+    55%,
+    75% {
+      transform: translateY(120vh) rotate(var(--tilt, 80deg));
+    }
   }
 
   .btn:focus-visible {
@@ -526,8 +593,13 @@ const showRules = pieces
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .card {
+    .card,
+    .btn[type='reset'] {
       transition: none;
+    }
+
+    :global(.toppled) :is(.hero, .stage-head, .howto, .slot, .credits) {
+      animation: none;
     }
   }
 </style>
