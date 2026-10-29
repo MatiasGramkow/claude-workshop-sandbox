@@ -1,9 +1,10 @@
 ---
 interface Props {
   title: string;
+  description: string;
 }
 
-const { title } = Astro.props;
+const { title, description } = Astro.props;
 ---
 
 <!doctype html>
@@ -11,25 +12,35 @@ const { title } = Astro.props;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
     <link rel="icon" href={`${import.meta.env.BASE_URL}/favicon.svg`} type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Creepster&display=swap" rel="stylesheet" />
     <title>{title}</title>
   </head>
   <body>
-    <main>
-      <slot />
-    </main>
+    <slot />
   </body>
 </html>
 
 <style is:global>
   :root {
-    --bg: #faf9f6;
-    --surface: #ffffff;
-    --text: #1d1d1b;
-    --muted: #6b6a66;
-    --border: #e4e2dc;
-    --accent: #c15f3c;
-    color-scheme: light;
+    --bg: #0f0b17;
+    --surface: #1b1426;
+    --surface-2: #261c36;
+    --text: #f4ecff;
+    --muted: #a99bbf;
+    --border: #3a2d4f;
+    --accent: #ff7a18;
+    --accent-2: #9d6bff;
+    --glow: #ffd23f;
+    --moon: #fff4c9;
+    --sky-top: #2a1840;
+    --sky-mid: #1a1029;
+    --sky-bottom: #120c1c;
+    --display: 'Creepster', system-ui, sans-serif;
+    color-scheme: dark;
   }
 
   * {
@@ -38,15 +49,16 @@ const { title } = Astro.props;
 
   body {
     margin: 0;
-    background: var(--bg);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, #2b1745 0%, transparent 60%),
+      var(--bg);
     color: var(--text);
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
     line-height: 1.5;
+    min-height: 100vh;
   }
 
-  main {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 48px 16px 64px;
+  a {
+    color: var(--accent);
   }
 </style>
