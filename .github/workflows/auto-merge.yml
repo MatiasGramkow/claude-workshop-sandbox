@@ -1,0 +1,57 @@
+name: Auto-merge
+
+# Runs in the base repository after CI finishes, so it has write access even for
+# pull requests from forks. It never checks out or runs the pull request's code.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  merge:
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+    steps:
+      - name: Find the pull request CI just passed
+        id: pr
+        run: |
+          # workflow_run.pull_requests is empty for forks, so look the PR up by its head.
+          number=$(gh api -X GET "repos/$REPO/pulls" -f state=open -f head="$HEAD_OWNER:$HEAD_BRANCH" \
+            --jq "map(select(.head.sha == \"$HEAD_SHA\")) | .[0].number // empty")
+          if [ -z "$number" ]; then
+            echo "No open pull request has head $HEAD_SHA any more (new commits or closed) - nothing to merge."
+            exit 0
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse changes to the workflows
+        if: steps.pr.outputs.number
+        id: guard
+        run: |
+          touched=$(gh api "repos/$REPO/pulls/${{ steps.pr.outputs.number }}/files" --paginate --jq '.[].filename' | grep '^\.github/' || true)
+          if [ -n "$touched" ]; then
+            gh pr comment "${{ steps.pr.outputs.number }}" -R "$REPO" --body "Not auto-merged: this PR changes \`.github/\`, which only the repo owner merges. A human will look at it."
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Squash-merge into master
+        if: steps.pr.outputs.number && steps.guard.outputs.blocked != 'true'
+        run: |
+          n="${{ steps.pr.outputs.number }}"
+          if ! gh pr merge "$n" -R "$REPO" --squash --match-head-commit "$HEAD_SHA"; then
+            gh pr comment "$n" -R "$REPO" --body "CI is green but the merge failed - usually a conflict with master. Pull master into your branch, push again, and the PR merges itself."
+            exit 1
+          fi
+          # A merge made with GITHUB_TOKEN does not trigger push workflows, so start the deploy explicitly.
+          gh workflow run deploy.yml -R "$REPO" --ref master

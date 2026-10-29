@@ -1,0 +1,62 @@
+---
+import { getCollection, render } from 'astro:content';
+import Base from '../layouts/Base.astro';
+import AttendeeCard from '../components/AttendeeCard.astro';
+
+const attendees = (await getCollection('attendees')).sort((a, b) =>
+  a.data.name.localeCompare(b.data.name, 'da'),
+);
+
+const cards = await Promise.all(
+  attendees.map(async (attendee) => ({ attendee, Content: (await render(attendee)).Content })),
+);
+---
+
+<Base title="Claude workshop wall">
+  <header>
+    <p class="eyebrow">Claude Code workshop</p>
+    <h1>Workshop wall</h1>
+    <p class="lede">
+      {attendees.length}
+      {attendees.length === 1 ? 'person has' : 'people have'} shipped a pull request today. Add
+      yourself: see the README.
+    </p>
+  </header>
+
+  <section class="grid">
+    {
+      cards.map(({ attendee, Content }) => (
+        <AttendeeCard {...attendee.data}>
+          <Content />
+        </AttendeeCard>
+      ))
+    }
+  </section>
+</Base>
+
+<style>
+  .eyebrow {
+    margin: 0;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  h1 {
+    margin: 4px 0 8px;
+    font-size: 2.5rem;
+  }
+
+  .lede {
+    margin: 0 0 32px;
+    color: var(--muted);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+</style>
